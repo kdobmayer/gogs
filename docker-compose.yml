@@ -1,0 +1,84 @@
+version: '3.3'
+
+volumes:
+  git_repos:
+  database:
+
+configs:
+  gogs_config:
+    file: gogs/app.ini
+
+secrets:
+  mysql_root_password:
+    file: mysql/root_password.txt
+  mysql_gogs_password:
+    file: mysql/gogs_password.txt
+
+services:
+  mysql:
+    image: mysql:5.7
+
+    volumes:
+      - type: volume
+        source: database
+        target: /var/lib/mysql
+
+    secrets:
+      - source: mysql_root_password
+        target: root_password
+        uid: '999'
+        gid: '999'
+        mode: 0400
+
+      - source: mysql_gogs_password
+        target: gogs_password
+        uid: '999'
+        gid: '999'
+        mode: 0400
+
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root_password
+      MYSQL_DATABASE: gogs
+      MYSQL_USER: gogs
+      MYSQL_PASSWORD_FILE: /run/secrets/gogs_password
+
+    command: >-
+        --character-set-server=utf8mb4
+        --collation-server=utf8mb4_unicode_ci
+
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  gogs:
+    build: .
+    image: kdobmayer/gogs:1.1
+    depends_on: [ mysql ]
+
+    volumes:
+      - type: volume
+        source: git_repos
+        target: /app/gogs/repositories
+
+    configs:
+      - source: gogs_config
+        target: /app/gogs/conf/app.ini
+        uid: '100'
+        gid: '101'
+
+    secrets:
+      - source: mysql_gogs_password
+        target: mysql_password
+        uid: '100'
+        gid: '101'
+        mode: 0400
+
+    ports:
+      - target: 3000
+        published: 3000
+
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
